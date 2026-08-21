@@ -165,6 +165,22 @@ button:disabled { background: #d9d2c1; color: #948a78; cursor: not-allowed; tran
 }
 .ticket:hover { box-shadow: var(--ombre-carte-hover); transform: translateY(-1px); }
 
+.ticket-image {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 7px;
+  display: block;
+}
+
+.ligne-admin-image {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+
 .ticket-info { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
 
 .ticket-nom {
@@ -237,3 +253,24 @@ button:disabled { background: #d9d2c1; color: #948a78; cursor: not-allowed; tran
 @media (prefers-reduced-motion: reduce) {
   .ticket { transition: none; }
 }
+
+/* ---- modale ---- */
+.fond-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(36, 31, 28, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  z-index: 10;
+}
+
+.modal { width: 100%; max-width: 380px; margin: 0; }
+
+.bouton-discret {
+  background: transparent;
+  color: var(--encre-douce);
+  margin-top: 0.6rem;
+}
+.bouton-discret:hover { background: var(--papier); }
