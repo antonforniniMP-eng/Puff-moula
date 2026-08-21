@@ -25,6 +25,8 @@
   <div class="carte modal">
     <label for="nom-client">Ton nom complet</label>
     <input id="nom-client" type="text" placeholder="ex. Julie Martin" autocomplete="name">
+    <label for="quantite-reservation">Quantité</label>
+    <input id="quantite-reservation" type="number" min="1" value="1">
     <button id="btn-confirmer">Confirmer la réservation</button>
     <button id="btn-annuler" class="bouton-discret">Annuler</button>
     <p class="erreur" id="erreur-modal">Entre ton nom pour continuer.</p>
@@ -36,6 +38,7 @@
 const liste = document.getElementById('liste');
 const fondModal = document.getElementById('fond-modal');
 const champNom = document.getElementById('nom-client');
+const champQuantite = document.getElementById('quantite-reservation');
 const erreurModal = document.getElementById('erreur-modal');
 let produitEnCours = null;
 
@@ -58,7 +61,7 @@ function rendre(produits) {
           ${epuise ? 'Stock épuisé' : `${p.stock} en stock`}
         </span>
       </div>
-      <button data-id="${p.id}" ${epuise ? 'disabled' : ''}>
+      <button data-id="${p.id}" data-stock="${p.stock}" ${epuise ? 'disabled' : ''}>
         ${epuise ? 'Épuisé' : 'Réserver'}
       </button>
     `;
@@ -86,6 +89,8 @@ liste.addEventListener('click', (e) => {
   if (!bouton || bouton.disabled) return;
   produitEnCours = bouton.dataset.id;
   champNom.value = '';
+  champQuantite.value = 1;
+  champQuantite.max = bouton.dataset.stock;
   erreurModal.style.display = 'none';
   fondModal.style.display = 'flex';
   champNom.focus();
@@ -98,7 +103,10 @@ document.getElementById('btn-annuler').addEventListener('click', () => {
 
 document.getElementById('btn-confirmer').addEventListener('click', async () => {
   const nom = champNom.value.trim();
+  const quantite = Math.max(1, parseInt(champQuantite.value, 10) || 1);
+
   if (!nom) {
+    erreurModal.textContent = 'Entre ton nom pour continuer.';
     erreurModal.style.display = 'block';
     return;
   }
@@ -109,14 +117,15 @@ document.getElementById('btn-confirmer').addEventListener('click', async () => {
 
   const { data, error } = await supabaseClient.rpc('reserver_produit', {
     p_produit_id: produitEnCours,
-    p_nom_client: nom
+    p_nom_client: nom,
+    p_quantite: quantite
   });
 
   btnConfirmer.disabled = false;
   btnConfirmer.textContent = 'Confirmer la réservation';
 
   if (error || !data || !data[0] || !data[0].succes) {
-    erreurModal.textContent = 'Stock épuisé, désolé.';
+    erreurModal.textContent = 'Stock insuffisant pour cette quantité.';
     erreurModal.style.display = 'block';
     setTimeout(charger, 1000);
     return;
