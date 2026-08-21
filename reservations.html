@@ -57,7 +57,7 @@ function formaterDate(iso) {
 async function chargerReservations() {
   const { data, error } = await supabaseClient
     .from('reservations')
-    .select('id, nom_client, created_at, produits(nom)')
+    .select('id, nom_client, quantite, created_at, produits(nom)')
     .order('created_at', { ascending: false })
     .limit(100);
 
@@ -80,7 +80,7 @@ async function chargerReservations() {
       <div style="flex:1;">
         <p class="ticket-nom">${r.nom_client}</p>
         <p class="sous-titre" style="margin-top:0.15rem;">
-          ${r.produits?.nom ?? 'Produit supprimé'} · ${formaterDate(r.created_at)}
+          ${r.quantite > 1 ? `${r.quantite}x ` : ''}${r.produits?.nom ?? 'Produit supprimé'} · ${formaterDate(r.created_at)}
         </p>
       </div>
     `;
