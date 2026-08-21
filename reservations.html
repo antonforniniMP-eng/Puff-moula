@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Suivi des réservations</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<header class="entete">
+  <div>
+    <p class="oeil">Espace admin</p>
+    <h1>Réservations</h1>
+    <p class="sous-titre">Qui a réservé quoi</p>
+  </div>
+  <a href="index.html">Voir le site</a>
+</header>
+
+<main>
+  <div class="carte" id="ecran-mdp" style="max-width:420px;">
+    <label for="mdp">Mot de passe</label>
+    <input id="mdp" type="password" autocomplete="current-password">
+    <button id="btn-entrer">Entrer</button>
+    <p class="erreur" id="erreur-mdp">Mot de passe incorrect.</p>
+  </div>
+
+  <div id="liste-reservations" style="display:none;"></div>
+</main>
+
+<script src="config.js"></script>
+<script>
+const ecranMdp = document.getElementById('ecran-mdp');
+const listeReservations = document.getElementById('liste-reservations');
+
+document.getElementById('btn-entrer').addEventListener('click', async () => {
+  const tentative = document.getElementById('mdp').value;
+  const { data, error } = await supabaseClient.rpc('admin_verifier_mdp', { p_mdp: tentative });
+
+  if (error || !data) {
+    document.getElementById('erreur-mdp').style.display = 'block';
+    return;
+  }
+
+  ecranMdp.style.display = 'none';
+  listeReservations.style.display = 'block';
+  chargerReservations();
+});
+
+function formaterDate(iso) {
+  return new Date(iso).toLocaleString('fr-FR', {
+    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+  });
+}
+
+async function chargerReservations() {
+  const { data, error } = await supabaseClient
+    .from('reservations')
+    .select('id, nom_client, created_at, produits(nom)')
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (error) {
+    listeReservations.innerHTML = '<p class="vide">Impossible de charger les réservations.</p>';
+    console.error(error);
+    return;
+  }
+
+  if (!data.length) {
+    listeReservations.innerHTML = '<p class="vide">Aucune réservation pour l’instant.</p>';
+    return;
+  }
+
+  listeReservations.innerHTML = '';
+  data.forEach(r => {
+    const ligne = document.createElement('div');
+    ligne.className = 'ligne-admin';
+    ligne.innerHTML = `
+      <div style="flex:1;">
+        <p class="ticket-nom">${r.nom_client}</p>
+        <p class="sous-titre" style="margin-top:0.15rem;">
+          ${r.produits?.nom ?? 'Produit supprimé'} · ${formaterDate(r.created_at)}
+        </p>
+      </div>
+    `;
+    listeReservations.appendChild(ligne);
+  });
+}
+</script>
+
+</body>
+</html>
