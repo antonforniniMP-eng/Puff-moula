@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Produits disponibles</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<header class="entete">
+  <div>
+    <p class="oeil">Catalogue</p>
+    <h1>Produits disponibles</h1>
+    <p class="sous-titre">Réserve ce dont tu as besoin</p>
+  </div>
+</header>
+
+<main>
+  <div id="liste" class="grille"></div>
+</main>
+
+<script src="config.js"></script>
+<script>
+const liste = document.getElementById('liste');
+
+function rendre(produits) {
+  if (!produits.length) {
+    liste.classList.remove('grille');
+    liste.innerHTML = '<p class="vide">Aucun produit disponible pour l’instant.</p>';
+    return;
+  }
+  liste.classList.add('grille');
+  liste.innerHTML = '';
+  produits.forEach(p => {
+    const epuise = p.stock <= 0;
+    const ticket = document.createElement('div');
+    ticket.className = 'ticket';
+    ticket.innerHTML = `
+      <div class="ticket-info">
+        <p class="ticket-nom">${p.nom}</p>
+        <span class="badge-stock ${epuise ? 'rupture' : ''}">
+          ${epuise ? 'Stock épuisé' : `${p.stock} en stock`}
+        </span>
+      </div>
+      <button data-id="${p.id}" ${epuise ? 'disabled' : ''}>
+        ${epuise ? 'Épuisé' : 'Réserver'}
+      </button>
+    `;
+    liste.appendChild(ticket);
+  });
+}
+
+async function charger() {
+  const { data, error } = await supabaseClient
+    .from('produits')
+    .select('id, nom, stock')
+    .order('ordre', { ascending: true });
+
+  if (error) {
+    liste.classList.remove('grille');
+    liste.innerHTML = '<p class="vide">Impossible de charger les produits.</p>';
+    console.error(error);
+    return;
+  }
+  rendre(data);
+}
+
+liste.addEventListener('click', async (e) => {
+  const bouton = e.target.closest('button[data-id]');
+  if (!bouton || bouton.disabled) return;
+
+  bouton.disabled = true;
+  bouton.textContent = 'Réservation…';
+
+  const { data, error } = await supabaseClient.rpc('reserver_produit', {
+    p_produit_id: bouton.dataset.id
+  });
+
+  if (error || !data || !data[0] || !data[0].succes) {
+    bouton.textContent = 'Stock épuisé';
+    setTimeout(charger, 1000);
+    return;
+  }
+
+  await charger();
+});
+
+charger();
+</script>
+
+</body>
+</html>
