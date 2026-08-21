@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Produits</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<header class="entete">
+  <div>
+    <p class="oeil">Espace admin</p>
+    <h1>Gérer mes produits</h1>
+    <p class="sous-titre">Ajoute, modifie ou retire un produit</p>
+  </div>
+  <a href="index.html">Voir le site</a>
+</header>
+
+<main>
+  <div class="carte" id="ecran-mdp" style="max-width:420px;">
+    <label for="mdp">Mot de passe</label>
+    <input id="mdp" type="password" autocomplete="current-password">
+    <button id="btn-entrer">Entrer</button>
+    <p class="erreur" id="erreur-mdp">Mot de passe incorrect.</p>
+  </div>
+
+  <div id="ecran-admin" style="display:none;">
+    <div class="carte" style="max-width:420px;">
+      <p class="oeil" style="margin-bottom:0.6rem;">Nouveau produit</p>
+      <label for="nouveau-nom">Nom du produit</label>
+      <input id="nouveau-nom" type="text" placeholder="ex. Pommes">
+      <label for="nouveau-stock">Stock</label>
+      <input id="nouveau-stock" type="number" min="0" placeholder="ex. 20">
+      <button id="btn-ajouter">Ajouter le produit</button>
+      <p class="erreur" id="erreur-ajout"></p>
+    </div>
+
+    <div id="liste-admin"></div>
+  </div>
+</main>
+
+<script src="config.js"></script>
+<script>
+let mdpSaisi = '';
+
+const ecranMdp = document.getElementById('ecran-mdp');
+const ecranAdmin = document.getElementById('ecran-admin');
+const listeAdmin = document.getElementById('liste-admin');
+
+document.getElementById('btn-entrer').addEventListener('click', async () => {
+  const tentative = document.getElementById('mdp').value;
+  const { error } = await supabaseClient.rpc('admin_modifier_produit', {
+    p_mdp: tentative, p_produit_id: '00000000-0000-0000-0000-000000000000',
+    p_nom: '', p_stock: 0
+  });
+  if (error && error.message.includes('Mot de passe incorrect')) {
+    document.getElementById('erreur-mdp').style.display = 'block';
+    return;
+  }
+  mdpSaisi = tentative;
+  ecranMdp.style.display = 'none';
+  ecranAdmin.style.display = 'block';
+  chargerListeAdmin();
+});
+
+function rendreAdmin(produits) {
+  if (!produits.length) {
+    listeAdmin.innerHTML = '<p class="vide">Aucun produit pour l’instant. Ajoute ton premier produit ci-dessus.</p>';
+    return;
+  }
+  listeAdmin.innerHTML = '';
+  produits.forEach(p => {
+    const ligne = document.createElement('div');
+    ligne.className = 'ligne-admin';
+    ligne.innerHTML = `
+      <p class="ticket-nom">${p.nom}</p>
+      <input type="number" min="0" value="${p.stock}" data-id="${p.id}" data-nom="${p.nom}" class="champ-stock">
+      <button class="btn-supprimer" data-supprimer="${p.id}">Supprimer</button>
+    `;
+    listeAdmin.appendChild(ligne);
+  });
+}
+
+async function chargerListeAdmin() {
+  const { data, error } = await supabaseClient
+    .from('produits')
+    .select('id, nom, stock')
+    .order('ordre', { ascending: true });
+  if (error) { console.error(error); return; }
+  rendreAdmin(data);
+}
+
+document.getElementById('btn-ajouter').addEventListener('click', async () => {
+  const nom = document.getElementById('nouveau-nom').value.trim();
+  const stock = parseInt(document.getElementById('nouveau-stock').value, 10) || 0;
+  const erreurAjout = document.getElementById('erreur-ajout');
+  erreurAjout.style.display = 'none';
+
+  if (!nom) {
+    erreurAjout.textContent = 'Entre un nom de produit.';
+    erreurAjout.style.display = 'block';
+    return;
+  }
+
+  const { error } = await supabaseClient.rpc('admin_ajouter_produit', {
+    p_mdp: mdpSaisi, p_nom: nom, p_stock: stock
+  });
+
+  if (error) {
+    erreurAjout.textContent = "Erreur lors de l'ajout.";
+    erreurAjout.style.display = 'block';
+    console.error(error);
+    return;
+  }
+
+  document.getElementById('nouveau-nom').value = '';
+  document.getElementById('nouveau-stock').value = '';
+  chargerListeAdmin();
+});
+
+listeAdmin.addEventListener('change', async (e) => {
+  if (!e.target.classList.contains('champ-stock')) return;
+  const nouveauStock = parseInt(e.target.value, 10) || 0;
+  await supabaseClient.rpc('admin_modifier_produit', {
+    p_mdp: mdpSaisi,
+    p_produit_id: e.target.dataset.id,
+    p_nom: e.target.dataset.nom,
+    p_stock: nouveauStock
+  });
+});
+
+listeAdmin.addEventListener('click', async (e) => {
+  const bouton = e.target.closest('button[data-supprimer]');
+  if (!bouton) return;
+  if (!confirm('Supprimer ce produit ?')) return;
+  await supabaseClient.rpc('admin_supprimer_produit', {
+    p_mdp: mdpSaisi, p_produit_id: bouton.dataset.supprimer
+  });
+  chargerListeAdmin();
+});
+</script>
+
+</body>
+</html>
