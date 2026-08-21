@@ -21,9 +21,23 @@
   <div id="liste" class="grille"></div>
 </main>
 
+<div id="fond-modal" class="fond-modal" style="display:none;">
+  <div class="carte modal">
+    <label for="nom-client">Ton nom complet</label>
+    <input id="nom-client" type="text" placeholder="ex. Julie Martin" autocomplete="name">
+    <button id="btn-confirmer">Confirmer la réservation</button>
+    <button id="btn-annuler" class="bouton-discret">Annuler</button>
+    <p class="erreur" id="erreur-modal">Entre ton nom pour continuer.</p>
+  </div>
+</div>
+
 <script src="config.js"></script>
 <script>
 const liste = document.getElementById('liste');
+const fondModal = document.getElementById('fond-modal');
+const champNom = document.getElementById('nom-client');
+const erreurModal = document.getElementById('erreur-modal');
+let produitEnCours = null;
 
 function rendre(produits) {
   if (!produits.length) {
@@ -67,23 +81,49 @@ async function charger() {
   rendre(data);
 }
 
-liste.addEventListener('click', async (e) => {
+liste.addEventListener('click', (e) => {
   const bouton = e.target.closest('button[data-id]');
   if (!bouton || bouton.disabled) return;
+  produitEnCours = bouton.dataset.id;
+  champNom.value = '';
+  erreurModal.style.display = 'none';
+  fondModal.style.display = 'flex';
+  champNom.focus();
+});
 
-  bouton.disabled = true;
-  bouton.textContent = 'Réservation…';
+document.getElementById('btn-annuler').addEventListener('click', () => {
+  fondModal.style.display = 'none';
+  produitEnCours = null;
+});
+
+document.getElementById('btn-confirmer').addEventListener('click', async () => {
+  const nom = champNom.value.trim();
+  if (!nom) {
+    erreurModal.style.display = 'block';
+    return;
+  }
+
+  const btnConfirmer = document.getElementById('btn-confirmer');
+  btnConfirmer.disabled = true;
+  btnConfirmer.textContent = 'Réservation…';
 
   const { data, error } = await supabaseClient.rpc('reserver_produit', {
-    p_produit_id: bouton.dataset.id
+    p_produit_id: produitEnCours,
+    p_nom_client: nom
   });
 
+  btnConfirmer.disabled = false;
+  btnConfirmer.textContent = 'Confirmer la réservation';
+
   if (error || !data || !data[0] || !data[0].succes) {
-    bouton.textContent = 'Stock épuisé';
+    erreurModal.textContent = 'Stock épuisé, désolé.';
+    erreurModal.style.display = 'block';
     setTimeout(charger, 1000);
     return;
   }
 
+  fondModal.style.display = 'none';
+  produitEnCours = null;
   await charger();
 });
 
