@@ -47,8 +47,10 @@
         <p class="oeil" style="margin-bottom:0.6rem;">Nouveau produit</p>
         <label for="nouveau-nom">Nom du produit</label>
         <input id="nouveau-nom" type="text" placeholder="ex. Pommes">
+        <div id="suggestions-catalogue" class="suggestions"></div>
         <label for="nouveau-stock">Stock</label>
         <input id="nouveau-stock" type="number" min="0" placeholder="ex. 20">
+        <p class="sous-titre" id="indice-reappro" style="display:none; margin-top:0.4rem;"></p>
         <button id="btn-ajouter">Ajouter le produit</button>
         <p class="erreur" id="erreur-ajout"></p>
       </div>
@@ -68,6 +70,7 @@
 <script src="config.js"></script>
 <script>
 let mdpSaisi = '';
+let produitsActuels = [];
 
 const ecranMdp = document.getElementById('ecran-mdp');
 const ecranDashboard = document.getElementById('ecran-dashboard');
@@ -91,6 +94,7 @@ document.getElementById('btn-entrer').addEventListener('click', async () => {
   chargerListeAdmin();
   chargerBanniereActuelle();
   chargerReservations();
+  chargerCatalogue();
 });
 
 // ---------- Onglets ----------
@@ -131,6 +135,32 @@ document.getElementById('btn-banniere').addEventListener('click', async () => {
   erreurBanniere.style.display = 'block';
 });
 
+// ---------- Catalogue de noms de produits ----------
+async function chargerCatalogue() {
+  const { data, error } = await supabaseClient
+    .from('catalogue_articles')
+    .select('nom')
+    .order('nom', { ascending: true });
+  if (error) { console.error(error); return; }
+
+  const conteneur = document.getElementById('suggestions-catalogue');
+  if (!data.length) {
+    conteneur.innerHTML = '';
+    return;
+  }
+  conteneur.innerHTML = data.map(a =>
+    `<button type="button" class="suggestion" data-nom="${a.nom}">${a.nom}</button>`
+  ).join('');
+}
+
+document.getElementById('suggestions-catalogue').addEventListener('click', (e) => {
+  const bouton = e.target.closest('.suggestion');
+  if (!bouton) return;
+  document.getElementById('nouveau-nom').value = bouton.dataset.nom;
+  verifierReappro();
+  document.getElementById('nouveau-stock').focus();
+});
+
 // ---------- Produits ----------
 function rendreAdmin(produits) {
   if (!produits.length) {
@@ -157,8 +187,24 @@ async function chargerListeAdmin() {
     .select('id, nom, stock')
     .order('ordre', { ascending: true });
   if (error) { console.error(error); return; }
+  produitsActuels = data;
   rendreAdmin(data);
 }
+
+function verifierReappro() {
+  const nom = document.getElementById('nouveau-nom').value.trim().toLowerCase();
+  const indice = document.getElementById('indice-reappro');
+  const existant = produitsActuels.find(p => p.nom.toLowerCase() === nom);
+  if (existant && nom) {
+    indice.textContent = `« ${existant.nom} » existe déjà (${existant.stock} en stock) — le stock que tu entres ci-dessus s'y ajoutera.`;
+    indice.style.color = 'var(--moutarde)';
+    indice.style.display = 'block';
+  } else {
+    indice.style.display = 'none';
+  }
+}
+
+document.getElementById('nouveau-nom').addEventListener('input', verifierReappro);
 
 document.getElementById('btn-ajouter').addEventListener('click', async () => {
   const nom = document.getElementById('nouveau-nom').value.trim();
@@ -185,7 +231,9 @@ document.getElementById('btn-ajouter').addEventListener('click', async () => {
 
   document.getElementById('nouveau-nom').value = '';
   document.getElementById('nouveau-stock').value = '';
+  document.getElementById('indice-reappro').style.display = 'none';
   chargerListeAdmin();
+  chargerCatalogue();
 });
 
 listeAdmin.addEventListener('change', async (e) => {
