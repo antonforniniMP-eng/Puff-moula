@@ -181,7 +181,7 @@ button:disabled { background: #d9d2c1; color: #948a78; cursor: not-allowed; tran
   flex-shrink: 0;
 }
 
-.ticket-info { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+.ticket-info { display: flex; align-items: center; gap: 0.85rem; }
 
 .ticket-nom {
   font-family: 'Fraunces', serif;
@@ -274,3 +274,54 @@ button:disabled { background: #d9d2c1; color: #948a78; cursor: not-allowed; tran
   margin-top: 0.6rem;
 }
 .bouton-discret:hover { background: var(--papier); }
+
+/* ---- bannière ---- */
+.banniere {
+  background: var(--vert);
+  color: #fdfbf6;
+  text-align: center;
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 1.15rem;
+  letter-spacing: 0.01em;
+  padding: 0.85rem 1.25rem;
+}
+
+/* ---- stats admin ---- */
+.stats-semaine {
+  background: var(--vert);
+  color: #fdfbf6;
+  border-radius: var(--rayon);
+  padding: 1.1rem 1.3rem;
+  margin-bottom: 1.1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.5rem;
+  font-size: 0.9rem;
+}
+
+.stats-semaine strong { font-family: 'IBM Plex Mono', monospace; font-size: 1.05rem; }
+
+/* ---- sélecteur de quantité ---- */
+.stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--ligne);
+  border-radius: 10px;
+  padding: 0.5rem 1.1rem;
+  background: #fff;
+}
+
+.stepper-bouton {
+  width: auto;
+  margin-top: 0;
+  background: transparent;
+  color: var(--encre);
+  border: none;
+  font-size: 1.4rem;
+  font-weight: 500;
+  padding: 0 0.6rem;
+  line-height: 1.2;
+}
+.stepper-
