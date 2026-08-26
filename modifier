@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modifier ma réservation</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<header class="entete">
+  <div>
+    <p class="oeil">Ta réservation</p>
+    <h1>Modifier</h1>
+    <p class="sous-titre">Ajuste la quantité si besoin</p>
+  </div>
+  <a href="index.html">Voir le site</a>
+</header>
+
+<main>
+  <div id="vue-chargement" class="carte" style="max-width:420px;">
+    <p class="sous-titre">Chargement de ta réservation…</p>
+  </div>
+
+  <div id="vue-reservation" class="carte" style="max-width:420px; display:none;">
+    <p class="ticket-nom" id="nom-produit" style="font-size:1.2rem;"></p>
+    <p class="sous-titre" id="details-reservation" style="margin-top:0.3rem;"></p>
+
+    <label style="margin-top:1.2rem;">Quantité</label>
+    <div class="stepper">
+      <button type="button" id="qte-moins" class="stepper-bouton">−</button>
+      <span id="qte-valeur" class="stepper-valeur">1</span>
+      <button type="button" id="qte-plus" class="stepper-bouton">+</button>
+    </div>
+
+    <button id="btn-enregistrer">Enregistrer les changements</button>
+    <p class="erreur" id="erreur-modif"></p>
+  </div>
+
+  <div id="vue-erreur" class="carte" style="max-width:420px; display:none;">
+    <p class="vide">Réservation introuvable. Vérifie le lien utilisé.</p>
+  </div>
+</main>
+
+<script src="config.js"></script>
+<script>
+const params = new URLSearchParams(window.location.search);
+const reservationId = params.get('id');
+
+const qteValeur = document.getElementById('qte-valeur');
+const qteMoins = document.getElementById('qte-moins');
+const qtePlus = document.getElementById('qte-plus');
+let quantite = 1;
+let quantiteMax = 5;
+
+function majStepper() {
+  qteValeur.textContent = quantite;
+  qteMoins.disabled = quantite <= 1;
+  qtePlus.disabled = quantite >= quantiteMax;
+}
+
+qteMoins.addEventListener('click', () => { if (quantite > 1) { quantite--; majStepper(); } });
+qtePlus.addEventListener('click', () => { if (quantite < quantiteMax) { quantite++; majStepper(); } });
+
+function formaterDateRetrait(dateStr) {
+  if (!dateStr) return '';
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('fr-FR', {
+    weekday: 'long', day: '2-digit', month: 'long'
+  });
+}
+
+async function charger() {
+  if (!reservationId) {
+    document.getElementById('vue-chargement').style.display = 'none';
+    document.getElementById('vue-erreur').style.display = 'block';
+    return;
+  }
+
+  const { data, error } = await supabaseClient
+    .from('reservations')
+    .select('id, nom_client, quantite, date_retrait, produits(id, nom, stock)')
+    .eq('id', reservationId)
+    .maybeSingle();
+
+  if (error || !data) {
+    document.getElementById('vue-chargement').style.display = 'none';
+    document.getElementById('vue-erreur').style.display = 'block';
+    return;
+  }
+
+  quantite = data.quantite;
+  // La quantité max possible = ce qu'il a déjà + le stock restant disponible
+  quantiteMax = Math.min(5, (data.produits?.stock ?? 0) + data.quantite);
+  majStepper();
+
+  document.getElementById('nom-produit').textContent = data.produits?.nom ?? 'Produit supprimé';
+  document.getElementById('details-reservation').textContent =
+    `Au nom de ${data.nom_client} · retrait ${formaterDateRetrait(data.date_retrait)}`;
+
+  document.getElementById('vue-chargement').style.display = 'none';
+  document.getElementById('vue-reservation').style.display = 'block';
+}
+
+document.getElementById('btn-enregistrer').addEventListener('click', async () => {
+  const erreurModif = document.getElementById('erreur-modif');
+  erreurModif.style.display = 'none';
+
+  const btn = document.getElementById('btn-enregistrer');
+  btn.disabled = true;
+  btn.textContent = 'Enregistrement…';
+
+  const { data, error } = await supabaseClient.rpc('modifier_reservation', {
+    p_reservation_id: reservationId,
+    p_nouvelle_quantite: quantite
+  });
+
+  btn.disabled = false;
+  btn.textContent = 'Enregistrer les changements';
+
+  if (error || !data || !data[0] || !data[0].succes) {
+    erreurModif.textContent = (data && data[0] && data[0].message) || 'Erreur lors de la modification.';
+    erreurModif.style.display = 'block';
+    return;
+  }
+
+  erreurModif.textContent = 'Réservation mise à jour ✓';
+  erreurModif.style.color = 'var(--vert)';
+  erreurModif.style.display = 'block';
+});
+
+charger();
+</script>
+
+</body>
+</html>
