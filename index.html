@@ -9,11 +9,13 @@
 </head>
 <body>
 
+<div id="banniere" class="banniere" style="display:none;"></div>
+
 <header class="entete">
   <div>
     <p class="oeil">Catalogue</p>
     <h1>Produits disponibles</h1>
-    <p class="sous-titre">Réserve ce dont tu as besoin</p>
+    <p class="sous-titre">Coche ce que tu veux réserver</p>
   </div>
 </header>
 
@@ -21,15 +23,41 @@
   <div id="liste" class="grille"></div>
 </main>
 
+<div id="barre-panier" class="barre-panier">
+  <div class="panier-icone">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="9" cy="21" r="1"></circle>
+      <circle cx="20" cy="21" r="1"></circle>
+      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+    </svg>
+    <span id="badge-panier" class="badge-panier">0</span>
+  </div>
+  <span class="panier-texte">Confirmer votre réservation</span>
+</div>
+
 <div id="fond-modal" class="fond-modal" style="display:none;">
   <div class="carte modal">
-    <label for="nom-client">Ton nom complet</label>
-    <input id="nom-client" type="text" placeholder="ex. Julie Martin" autocomplete="name">
-    <label for="quantite-reservation">Quantité</label>
-    <input id="quantite-reservation" type="number" min="1" value="1">
-    <button id="btn-confirmer">Confirmer la réservation</button>
-    <button id="btn-annuler" class="bouton-discret">Annuler</button>
-    <p class="erreur" id="erreur-modal">Entre ton nom pour continuer.</p>
+
+    <div id="vue-formulaire">
+      <p class="oeil" style="margin-bottom:0.4rem;">Récapitulatif</p>
+      <div id="recap-selection" style="margin-bottom:0.6rem;"></div>
+
+      <label for="nom-client">Ton nom complet</label>
+      <input id="nom-client" type="text" placeholder="ex. Julie Martin" autocomplete="name">
+
+      <label for="date-retrait">Date de retrait</label>
+      <input id="date-retrait" type="date">
+      <button id="btn-confirmer">Confirmer la réservation</button>
+      <button id="btn-annuler" class="bouton-discret">Annuler</button>
+      <p class="erreur" id="erreur-modal">Entre ton nom pour continuer.</p>
+    </div>
+
+    <div id="vue-confirmation" style="display:none;">
+      <p class="oeil">Réservation confirmée</p>
+      <div id="confirmation-liste"></div>
+      <button id="btn-fermer-confirmation">Fermer</button>
+    </div>
+
   </div>
 </div>
 
@@ -37,10 +65,59 @@
 <script>
 const liste = document.getElementById('liste');
 const fondModal = document.getElementById('fond-modal');
+const vueFormulaire = document.getElementById('vue-formulaire');
+const vueConfirmation = document.getElementById('vue-confirmation');
 const champNom = document.getElementById('nom-client');
-const champQuantite = document.getElementById('quantite-reservation');
+const champDate = document.getElementById('date-retrait');
 const erreurModal = document.getElementById('erreur-modal');
-let produitEnCours = null;
+const barrePanier = document.getElementById('barre-panier');
+const badgePanier = document.getElementById('badge-panier');
+
+// selection: Map(produit_id -> { nom, quantite, max })
+const selection = new Map();
+
+function calculerFenetreRetrait() {
+  const versYMD = (d) => d.toISOString().split('T')[0];
+  const aujourdhui = new Date();
+  aujourdhui.setHours(0, 0, 0, 0);
+  const demain = new Date(aujourdhui);
+  demain.setDate(demain.getDate() + 1);
+  const jourDemain = demain.getDay();
+  let lundi;
+  if (jourDemain >= 1 && jourDemain <= 5) {
+    lundi = new Date(demain);
+    while (lundi.getDay() !== 1) lundi.setDate(lundi.getDate() - 1);
+  } else {
+    lundi = new Date(demain);
+    while (lundi.getDay() !== 1) lundi.setDate(lundi.getDate() + 1);
+  }
+  const vendredi = new Date(lundi);
+  vendredi.setDate(lundi.getDate() + 4);
+  const min = demain > lundi ? demain : lundi;
+  return { min: versYMD(min), max: versYMD(vendredi) };
+}
+
+function formaterDateAffichage(ymd) {
+  return new Date(ymd + 'T00:00:00').toLocaleDateString('fr-FR', {
+    weekday: 'long', day: '2-digit', month: 'long'
+  });
+}
+
+async function chargerBanniere() {
+  const banniere = document.getElementById('banniere');
+  const { data } = await supabaseClient.from('parametres').select('texte_banniere').eq('id', 1).maybeSingle();
+  if (data && data.texte_banniere && data.texte_banniere.trim()) {
+    banniere.textContent = data.texte_banniere;
+    banniere.style.display = 'block';
+  }
+}
+
+function majBoutonSelection() {
+  const nb = selection.size;
+  badgePanier.textContent = nb;
+  barrePanier.classList.toggle('visible', nb > 0);
+  document.body.classList.toggle('avec-barre-panier', nb > 0);
+}
 
 function rendre(produits) {
   if (!produits.length) {
@@ -52,21 +129,32 @@ function rendre(produits) {
   liste.innerHTML = '';
   produits.forEach(p => {
     const epuise = p.stock <= 0;
+    const dejaCoche = selection.has(p.id);
     const ticket = document.createElement('div');
     ticket.className = 'ticket';
     ticket.innerHTML = `
       <div class="ticket-info">
-        <p class="ticket-nom">${p.nom}</p>
-        <span class="badge-stock ${epuise ? 'rupture' : ''}">
-          ${epuise ? 'Stock épuisé' : `${p.stock} en stock`}
-        </span>
+        <label class="case-produit">
+          <input type="checkbox" class="case-cocher" data-id="${p.id}" data-nom="${p.nom}" data-stock="${p.stock}"
+            ${epuise ? 'disabled' : ''} ${dejaCoche ? 'checked' : ''}>
+          <span class="rond"></span>
+        </label>
+        <div style="flex:1; min-width:0;">
+          <p class="ticket-nom">${p.nom}</p>
+          <span class="badge-stock ${epuise ? 'rupture' : ''}">
+            ${epuise ? 'Stock épuisé' : `${p.stock} en stock`}
+          </span>
+        </div>
       </div>
-      <button data-id="${p.id}" data-stock="${p.stock}" ${epuise ? 'disabled' : ''}>
-        ${epuise ? 'Épuisé' : 'Réserver'}
-      </button>
+      <div class="stepper-inline" data-stepper="${p.id}" style="display:${dejaCoche ? 'flex' : 'none'};">
+        <button type="button" class="stepper-bouton" data-moins="${p.id}">−</button>
+        <span class="stepper-valeur" data-valeur="${p.id}">${dejaCoche ? selection.get(p.id).quantite : 1}</span>
+        <button type="button" class="stepper-bouton" data-plus="${p.id}">+</button>
+      </div>
     `;
     liste.appendChild(ticket);
   });
+  majBoutonSelection();
 }
 
 async function charger() {
@@ -74,7 +162,6 @@ async function charger() {
     .from('produits')
     .select('id, nom, stock')
     .order('ordre', { ascending: true });
-
   if (error) {
     liste.classList.remove('grille');
     liste.innerHTML = '<p class="vide">Impossible de charger les produits.</p>';
@@ -84,29 +171,77 @@ async function charger() {
   rendre(data);
 }
 
+liste.addEventListener('change', (e) => {
+  const case_ = e.target.closest('.case-cocher');
+  if (!case_) return;
+  const id = case_.dataset.id;
+  const stepper = liste.querySelector(`[data-stepper="${id}"]`);
+  if (case_.checked) {
+    const max = Math.min(5, parseInt(case_.dataset.stock, 10));
+    selection.set(id, { nom: case_.dataset.nom, quantite: 1, max });
+    stepper.style.display = 'flex';
+    stepper.querySelector('[data-valeur]').textContent = 1;
+  } else {
+    selection.delete(id);
+    stepper.style.display = 'none';
+  }
+  majBoutonSelection();
+});
+
 liste.addEventListener('click', (e) => {
-  const bouton = e.target.closest('button[data-id]');
-  if (!bouton || bouton.disabled) return;
-  produitEnCours = bouton.dataset.id;
+  const moins = e.target.closest('[data-moins]');
+  const plus = e.target.closest('[data-plus]');
+  if (!moins && !plus) return;
+  const id = (moins || plus).dataset.moins || (moins || plus).dataset.plus;
+  const info = selection.get(id);
+  if (!info) return;
+  if (moins && info.quantite > 1) info.quantite--;
+  if (plus && info.quantite < info.max) info.quantite++;
+  liste.querySelector(`[data-valeur="${id}"]`).textContent = info.quantite;
+});
+
+function rendreRecap() {
+  const recap = document.getElementById('recap-selection');
+  recap.innerHTML = [...selection.values()]
+    .map(v => `<p class="sous-titre">${v.quantite}x ${v.nom}</p>`)
+    .join('');
+}
+
+barrePanier.addEventListener('click', () => {
+  if (selection.size === 0) return;
+  rendreRecap();
   champNom.value = '';
-  champQuantite.value = 1;
-  champQuantite.max = bouton.dataset.stock;
+  const fenetre = calculerFenetreRetrait();
+  champDate.min = fenetre.min;
+  champDate.max = fenetre.max;
+  champDate.value = fenetre.min;
   erreurModal.style.display = 'none';
+  vueConfirmation.style.display = 'none';
+  vueFormulaire.style.display = 'block';
   fondModal.style.display = 'flex';
-  champNom.focus();
 });
 
 document.getElementById('btn-annuler').addEventListener('click', () => {
   fondModal.style.display = 'none';
-  produitEnCours = null;
+});
+
+document.getElementById('btn-fermer-confirmation').addEventListener('click', () => {
+  fondModal.style.display = 'none';
+  selection.clear();
+  charger();
 });
 
 document.getElementById('btn-confirmer').addEventListener('click', async () => {
   const nom = champNom.value.trim();
-  const quantite = Math.max(1, parseInt(champQuantite.value, 10) || 1);
+  const dateRetrait = champDate.value;
 
   if (!nom) {
     erreurModal.textContent = 'Entre ton nom pour continuer.';
+    erreurModal.style.display = 'block';
+    return;
+  }
+  if (!dateRetrait || dateRetrait < champDate.min || dateRetrait > champDate.max) {
+    erreurModal.textContent = 'Choisis une date de retrait valide.';
     erreurModal.style.display = 'block';
     return;
   }
@@ -115,27 +250,44 @@ document.getElementById('btn-confirmer').addEventListener('click', async () => {
   btnConfirmer.disabled = true;
   btnConfirmer.textContent = 'Réservation…';
 
-  const { data, error } = await supabaseClient.rpc('reserver_produit', {
-    p_produit_id: produitEnCours,
-    p_nom_client: nom,
-    p_quantite: quantite
-  });
+  const resultats = [];
+  for (const [produitId, info] of selection.entries()) {
+    const { data, error } = await supabaseClient.rpc('reserver_produit', {
+      p_produit_id: produitId,
+      p_nom_client: nom,
+      p_quantite: info.quantite,
+      p_date_retrait: dateRetrait
+    });
+    const ok = !error && data && data[0] && data[0].succes;
+    resultats.push({
+      nom: info.nom,
+      quantite: info.quantite,
+      succes: ok,
+      id: ok ? data[0].reservation_id : null
+    });
+  }
 
   btnConfirmer.disabled = false;
   btnConfirmer.textContent = 'Confirmer la réservation';
 
-  if (error || !data || !data[0] || !data[0].succes) {
-    erreurModal.textContent = 'Stock insuffisant pour cette quantité.';
-    erreurModal.style.display = 'block';
-    setTimeout(charger, 1000);
-    return;
-  }
+  const confirmationListe = document.getElementById('confirmation-liste');
+  confirmationListe.innerHTML = resultats.map(r => `
+    <div class="ligne-admin" style="margin-bottom:0.6rem;">
+      <div style="flex:1;">
+        <p class="ticket-nom">${r.quantite}x ${r.nom}</p>
+        <p class="sous-titre" style="margin-top:0.15rem;">
+          ${r.succes ? `Au nom de ${nom} · retrait ${formaterDateAffichage(dateRetrait)}` : 'Stock insuffisant, désolé'}
+        </p>
+      </div>
+      ${r.succes ? `<a href="modifier.html?id=${r.id}" class="bouton-discret" style="width:auto; padding:0.5rem 0.85rem; text-decoration:none; margin-top:0;">Modifier</a>` : ''}
+    </div>
+  `).join('');
 
-  fondModal.style.display = 'none';
-  produitEnCours = null;
-  await charger();
+  vueFormulaire.style.display = 'none';
+  vueConfirmation.style.display = 'block';
 });
 
+chargerBanniere();
 charger();
 </script>
 
