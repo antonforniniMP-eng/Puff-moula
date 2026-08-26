@@ -28,6 +28,14 @@
 
   <div id="ecran-admin" style="display:none;">
     <div class="carte" style="max-width:420px;">
+      <p class="oeil" style="margin-bottom:0.6rem;">Bannière du site</p>
+      <label for="banniere-texte">Texte affiché en haut de la page (vide = masqué)</label>
+      <input id="banniere-texte" type="text" placeholder="ex. 5 achetés, 1 offert">
+      <button id="btn-banniere">Enregistrer la bannière</button>
+      <p class="erreur" id="erreur-banniere"></p>
+    </div>
+
+    <div class="carte" style="max-width:420px;">
       <p class="oeil" style="margin-bottom:0.6rem;">Nouveau produit</p>
       <label for="nouveau-nom">Nom du produit</label>
       <input id="nouveau-nom" type="text" placeholder="ex. Pommes">
@@ -63,6 +71,32 @@ document.getElementById('btn-entrer').addEventListener('click', async () => {
   ecranMdp.style.display = 'none';
   ecranAdmin.style.display = 'block';
   chargerListeAdmin();
+  chargerBanniereActuelle();
+});
+
+async function chargerBanniereActuelle() {
+  const { data } = await supabaseClient.from('parametres').select('texte_banniere').eq('id', 1).maybeSingle();
+  document.getElementById('banniere-texte').value = (data && data.texte_banniere) || '';
+}
+
+document.getElementById('btn-banniere').addEventListener('click', async () => {
+  const texte = document.getElementById('banniere-texte').value.trim();
+  const erreurBanniere = document.getElementById('erreur-banniere');
+  erreurBanniere.style.display = 'none';
+
+  const { error } = await supabaseClient.rpc('admin_modifier_banniere', {
+    p_mdp: mdpSaisi, p_texte: texte
+  });
+
+  if (error) {
+    erreurBanniere.textContent = "Erreur lors de l'enregistrement.";
+    erreurBanniere.style.display = 'block';
+    console.error(error);
+    return;
+  }
+  erreurBanniere.textContent = 'Bannière enregistrée ✓';
+  erreurBanniere.style.color = 'var(--vert)';
+  erreurBanniere.style.display = 'block';
 });
 
 function rendreAdmin(produits) {
