@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dashboard</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=3">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -46,7 +46,7 @@
 
       <div class="carte" style="max-width:480px;">
         <p class="oeil" style="margin-bottom:0.3rem;">1. Catalogue de produits</p>
-        <p class="sous-titre" style="margin-bottom:0.8rem;">Tous les noms déjà utilisés une fois. Renomme ou supprime ici.</p>
+        <p class="sous-titre" style="margin-bottom:0.8rem;">Renomme, ajoute directement avec une quantité, ou supprime.</p>
         <div id="liste-catalogue"></div>
       </div>
 
@@ -151,19 +151,19 @@ async function chargerCatalogue() {
     .order('nom', { ascending: true });
   if (error) { console.error(error); return; }
 
-  // Remplit le datalist pour le champ "nouveau produit"
   document.getElementById('catalogue-datalist').innerHTML =
     data.map(a => `<option value="${a.nom}">`).join('');
 
-  // Affiche la liste modifiable
   if (!data.length) {
     listeCatalogue.innerHTML = '<p class="vide">Aucun nom enregistré pour l’instant.</p>';
     return;
   }
   listeCatalogue.innerHTML = data.map(a => `
-    <div style="display:flex; align-items:center; gap:0.6rem; margin-bottom:0.6rem;">
-      <input type="text" value="${a.nom}" data-catalogue-id="${a.id}" class="champ-nom-catalogue" style="flex:1;">
-      <button type="button" class="btn-supprimer" data-supprimer-catalogue="${a.id}" style="width:auto; margin-top:0; flex-shrink:0;">Supprimer</button>
+    <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.6rem; flex-wrap:wrap;">
+      <input type="text" value="${a.nom}" data-catalogue-id="${a.id}" class="champ-nom-catalogue" style="flex:2; min-width:110px;">
+      <input type="number" min="0" placeholder="Qté" data-catalogue-qte="${a.id}" class="champ-qte-catalogue" style="flex:0 0 70px; text-align:center;">
+      <button type="button" class="btn-ajouter-ligne" data-ajouter-catalogue="${a.id}" style="width:auto; margin-top:0; flex-shrink:0; padding:0.55rem 0.9rem; font-size:0.82rem;">Ajouter</button>
+      <button type="button" class="btn-supprimer" data-supprimer-catalogue="${a.id}" style="width:auto; margin-top:0; flex-shrink:0; padding:0.55rem 0.9rem; font-size:0.82rem;">Suppr.</button>
     </div>
   `).join('');
 }
@@ -179,13 +179,36 @@ listeCatalogue.addEventListener('change', async (e) => {
 });
 
 listeCatalogue.addEventListener('click', async (e) => {
-  const bouton = e.target.closest('button[data-supprimer-catalogue]');
-  if (!bouton) return;
-  if (!confirm('Retirer ce nom du catalogue ? (les produits déjà actifs sous ce nom ne sont pas touchés)')) return;
-  await supabaseClient.rpc('admin_supprimer_catalogue', {
-    p_mdp: mdpSaisi, p_id: bouton.dataset.supprimerCatalogue
-  });
-  chargerCatalogue();
+  const btnSupprimer = e.target.closest('button[data-supprimer-catalogue]');
+  if (btnSupprimer) {
+    if (!confirm('Retirer ce nom du catalogue ? (les produits déjà actifs sous ce nom ne sont pas touchés)')) return;
+    await supabaseClient.rpc('admin_supprimer_catalogue', {
+      p_mdp: mdpSaisi, p_id: btnSupprimer.dataset.supprimerCatalogue
+    });
+    chargerCatalogue();
+    return;
+  }
+
+  const btnAjouter = e.target.closest('button[data-ajouter-catalogue]');
+  if (btnAjouter) {
+    const id = btnAjouter.dataset.ajouterCatalogue;
+    const champNom = listeCatalogue.querySelector(`.champ-nom-catalogue[data-catalogue-id="${id}"]`);
+    const champQte = listeCatalogue.querySelector(`.champ-qte-catalogue[data-catalogue-qte="${id}"]`);
+    const nom = champNom.value.trim();
+    const qte = parseInt(champQte.value, 10) || 0;
+    if (!nom) return;
+
+    btnAjouter.disabled = true;
+    const { error } = await supabaseClient.rpc('admin_ajouter_produit', {
+      p_mdp: mdpSaisi, p_nom: nom, p_stock: qte
+    });
+    btnAjouter.disabled = false;
+    if (error) { alert("Erreur lors de l'ajout."); return; }
+
+    champQte.value = '';
+    chargerListeAdmin();
+    chargerCatalogue();
+  }
 });
 
 // ---------- 2. Réapprovisionnement (indice visuel) ----------
