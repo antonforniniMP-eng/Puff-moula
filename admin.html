@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin — Produits</title>
+<title>Dashboard</title>
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -12,8 +12,8 @@
 <header class="entete">
   <div>
     <p class="oeil">Espace admin</p>
-    <h1>Gérer mes produits</h1>
-    <p class="sous-titre">Ajoute, modifie ou retire un produit</p>
+    <h1>Dashboard</h1>
+    <p class="sous-titre">Produits, stock et réservations</p>
   </div>
   <a href="index.html">Voir le site</a>
 </header>
@@ -26,26 +26,42 @@
     <p class="erreur" id="erreur-mdp">Mot de passe incorrect.</p>
   </div>
 
-  <div id="ecran-admin" style="display:none;">
-    <div class="carte" style="max-width:420px;">
-      <p class="oeil" style="margin-bottom:0.6rem;">Bannière du site</p>
-      <label for="banniere-texte">Texte affiché en haut de la page (vide = masqué)</label>
-      <input id="banniere-texte" type="text" placeholder="ex. 5 achetés, 1 offert">
-      <button id="btn-banniere">Enregistrer la bannière</button>
-      <p class="erreur" id="erreur-banniere"></p>
+  <div id="ecran-dashboard" style="display:none;">
+
+    <div class="onglets">
+      <button type="button" class="onglet actif" data-onglet="produits">Produits</button>
+      <button type="button" class="onglet" data-onglet="reservations">Réservations</button>
     </div>
 
-    <div class="carte" style="max-width:420px;">
-      <p class="oeil" style="margin-bottom:0.6rem;">Nouveau produit</p>
-      <label for="nouveau-nom">Nom du produit</label>
-      <input id="nouveau-nom" type="text" placeholder="ex. Pommes">
-      <label for="nouveau-stock">Stock</label>
-      <input id="nouveau-stock" type="number" min="0" placeholder="ex. 20">
-      <button id="btn-ajouter">Ajouter le produit</button>
-      <p class="erreur" id="erreur-ajout"></p>
+    <!-- ===== ONGLET PRODUITS ===== -->
+    <div id="vue-produits">
+      <div class="carte" style="max-width:420px;">
+        <p class="oeil" style="margin-bottom:0.6rem;">Bannière du site</p>
+        <label for="banniere-texte">Texte affiché en haut de la page (vide = masqué)</label>
+        <input id="banniere-texte" type="text" placeholder="ex. 5 achetés, 1 offert">
+        <button id="btn-banniere">Enregistrer la bannière</button>
+        <p class="erreur" id="erreur-banniere"></p>
+      </div>
+
+      <div class="carte" style="max-width:420px;">
+        <p class="oeil" style="margin-bottom:0.6rem;">Nouveau produit</p>
+        <label for="nouveau-nom">Nom du produit</label>
+        <input id="nouveau-nom" type="text" placeholder="ex. Pommes">
+        <label for="nouveau-stock">Stock</label>
+        <input id="nouveau-stock" type="number" min="0" placeholder="ex. 20">
+        <button id="btn-ajouter">Ajouter le produit</button>
+        <p class="erreur" id="erreur-ajout"></p>
+      </div>
+
+      <div id="liste-admin"></div>
     </div>
 
-    <div id="liste-admin"></div>
+    <!-- ===== ONGLET RÉSERVATIONS ===== -->
+    <div id="vue-reservations" style="display:none;">
+      <div id="stats-semaine" style="display:none;"></div>
+      <div id="liste-reservations"></div>
+    </div>
+
   </div>
 </main>
 
@@ -54,9 +70,11 @@
 let mdpSaisi = '';
 
 const ecranMdp = document.getElementById('ecran-mdp');
-const ecranAdmin = document.getElementById('ecran-admin');
+const ecranDashboard = document.getElementById('ecran-dashboard');
 const listeAdmin = document.getElementById('liste-admin');
+const listeReservations = document.getElementById('liste-reservations');
 
+// ---------- Connexion ----------
 document.getElementById('btn-entrer').addEventListener('click', async () => {
   const tentative = document.getElementById('mdp').value;
   const { error } = await supabaseClient.rpc('admin_modifier_produit', {
@@ -69,11 +87,24 @@ document.getElementById('btn-entrer').addEventListener('click', async () => {
   }
   mdpSaisi = tentative;
   ecranMdp.style.display = 'none';
-  ecranAdmin.style.display = 'block';
+  ecranDashboard.style.display = 'block';
   chargerListeAdmin();
   chargerBanniereActuelle();
+  chargerReservations();
 });
 
+// ---------- Onglets ----------
+document.querySelectorAll('.onglet').forEach(bouton => {
+  bouton.addEventListener('click', () => {
+    document.querySelectorAll('.onglet').forEach(b => b.classList.remove('actif'));
+    bouton.classList.add('actif');
+    const cible = bouton.dataset.onglet;
+    document.getElementById('vue-produits').style.display = cible === 'produits' ? 'block' : 'none';
+    document.getElementById('vue-reservations').style.display = cible === 'reservations' ? 'block' : 'none';
+  });
+});
+
+// ---------- Bannière ----------
 async function chargerBanniereActuelle() {
   const { data } = await supabaseClient.from('parametres').select('texte_banniere').eq('id', 1).maybeSingle();
   document.getElementById('banniere-texte').value = (data && data.texte_banniere) || '';
@@ -90,6 +121,7 @@ document.getElementById('btn-banniere').addEventListener('click', async () => {
 
   if (error) {
     erreurBanniere.textContent = "Erreur lors de l'enregistrement.";
+    erreurBanniere.style.color = 'var(--rouge-rupture)';
     erreurBanniere.style.display = 'block';
     console.error(error);
     return;
@@ -99,6 +131,7 @@ document.getElementById('btn-banniere').addEventListener('click', async () => {
   erreurBanniere.style.display = 'block';
 });
 
+// ---------- Produits ----------
 function rendreAdmin(produits) {
   if (!produits.length) {
     listeAdmin.innerHTML = '<p class="vide">Aucun produit pour l’instant. Ajoute ton premier produit ci-dessus.</p>';
@@ -110,6 +143,7 @@ function rendreAdmin(produits) {
     ligne.className = 'ligne-admin';
     ligne.innerHTML = `
       <p class="ticket-nom">${p.nom}</p>
+      <label style="margin:0.4rem 0 0;">Stock</label>
       <input type="number" min="0" value="${p.stock}" data-id="${p.id}" data-nom="${p.nom}" class="champ-stock">
       <button class="btn-supprimer" data-supprimer="${p.id}">Supprimer</button>
     `;
@@ -173,6 +207,100 @@ listeAdmin.addEventListener('click', async (e) => {
     p_mdp: mdpSaisi, p_produit_id: bouton.dataset.supprimer
   });
   chargerListeAdmin();
+});
+
+// ---------- Réservations ----------
+function formaterDate(iso) {
+  return new Date(iso).toLocaleString('fr-FR', {
+    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+  });
+}
+
+function formaterDateRetrait(dateStr) {
+  if (!dateStr) return '';
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('fr-FR', {
+    weekday: 'short', day: '2-digit', month: '2-digit'
+  });
+}
+
+function afficherStatsSemaine(data) {
+  const statsDiv = document.getElementById('stats-semaine');
+  const debutSemaine = new Date();
+  debutSemaine.setHours(0, 0, 0, 0);
+  while (debutSemaine.getDay() !== 1) debutSemaine.setDate(debutSemaine.getDate() - 1);
+
+  const reservationsSemaine = data.filter(r => new Date(r.created_at) >= debutSemaine);
+  if (!reservationsSemaine.length) {
+    statsDiv.style.display = 'none';
+    return;
+  }
+
+  const compteParProduit = {};
+  reservationsSemaine.forEach(r => {
+    const nom = r.produits?.nom ?? 'Produit supprimé';
+    compteParProduit[nom] = (compteParProduit[nom] || 0) + r.quantite;
+  });
+
+  const [produitTop, quantiteTop] = Object.entries(compteParProduit).sort((a, b) => b[1] - a[1])[0];
+
+  statsDiv.innerHTML = `
+    <div class="stats-semaine">
+      <span><strong>${reservationsSemaine.length}</strong> réservation${reservationsSemaine.length > 1 ? 's' : ''} cette semaine</span>
+      <span>Produit le plus demandé : <strong>${produitTop}</strong> (${quantiteTop})</span>
+    </div>
+  `;
+  statsDiv.style.display = 'block';
+}
+
+async function chargerReservations() {
+  const { data, error } = await supabaseClient
+    .from('reservations')
+    .select('id, nom_client, quantite, date_retrait, created_at, produits(nom)')
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (error) {
+    listeReservations.innerHTML = '<p class="vide">Impossible de charger les réservations.</p>';
+    console.error(error);
+    return;
+  }
+  if (!data.length) {
+    listeReservations.innerHTML = '<p class="vide">Aucune réservation pour l’instant.</p>';
+    return;
+  }
+
+  afficherStatsSemaine(data);
+
+  listeReservations.innerHTML = '';
+  data.forEach(r => {
+    const ligne = document.createElement('div');
+    ligne.className = 'ligne-admin';
+    ligne.innerHTML = `
+      <div style="flex:1; min-width:0;">
+        <p class="ticket-nom">${r.nom_client}</p>
+        <p class="sous-titre" style="margin-top:0.15rem;">
+          ${r.produits?.nom ?? 'Produit supprimé'} · retrait ${formaterDateRetrait(r.date_retrait)} · réservé le ${formaterDate(r.created_at)}
+        </p>
+      </div>
+      <input type="number" min="1" max="5" value="${r.quantite}" data-reservation="${r.id}" class="champ-stock">
+    `;
+    listeReservations.appendChild(ligne);
+  });
+}
+
+listeReservations.addEventListener('change', async (e) => {
+  if (!e.target.dataset.reservation) return;
+  const nouvelleQuantite = parseInt(e.target.value, 10) || 1;
+  const { data, error } = await supabaseClient.rpc('modifier_reservation', {
+    p_reservation_id: e.target.dataset.reservation,
+    p_nouvelle_quantite: nouvelleQuantite
+  });
+  if (error || !data || !data[0] || !data[0].succes) {
+    alert((data && data[0] && data[0].message) || 'Erreur lors de la modification.');
+    chargerReservations();
+    return;
+  }
+  chargerReservations();
 });
 </script>
 
