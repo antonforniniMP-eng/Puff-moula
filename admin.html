@@ -28,14 +28,15 @@
 
   <div id="ecran-dashboard" style="display:none;">
 
-    <div class="onglets">
-      <button type="button" class="onglet actif" data-onglet="produits">Produits</button>
-      <button type="button" class="onglet" data-onglet="reservations">Réservations</button>
+    <div style="display:flex; gap:0.5rem; margin-bottom:1.3rem;">
+      <button type="button" class="onglet actif" data-onglet="produits" style="width:auto; margin-top:0; flex:1;">Produits</button>
+      <button type="button" class="onglet" data-onglet="reservations" style="width:auto; margin-top:0; flex:1;">Réservations</button>
     </div>
 
     <!-- ===== ONGLET PRODUITS ===== -->
     <div id="vue-produits">
-      <div class="carte" style="max-width:420px;">
+
+      <div class="carte" style="max-width:480px;">
         <p class="oeil" style="margin-bottom:0.6rem;">Bannière du site</p>
         <label for="banniere-texte">Texte affiché en haut de la page (vide = masqué)</label>
         <input id="banniere-texte" type="text" placeholder="ex. 5 achetés, 1 offert">
@@ -43,11 +44,18 @@
         <p class="erreur" id="erreur-banniere"></p>
       </div>
 
-      <div class="carte" style="max-width:420px;">
-        <p class="oeil" style="margin-bottom:0.6rem;">Nouveau produit</p>
+      <div class="carte" style="max-width:480px;">
+        <p class="oeil" style="margin-bottom:0.3rem;">1. Catalogue de produits</p>
+        <p class="sous-titre" style="margin-bottom:0.8rem;">Tous les noms déjà utilisés une fois. Renomme ou supprime ici.</p>
+        <div id="liste-catalogue"></div>
+      </div>
+
+      <div class="carte" style="max-width:480px;">
+        <p class="oeil" style="margin-bottom:0.3rem;">2. Ajouter un produit sur le site</p>
+        <p class="sous-titre" style="margin-bottom:0.8rem;">Choisis un nom déjà connu ou tape-en un nouveau.</p>
         <label for="nouveau-nom">Nom du produit</label>
-        <input id="nouveau-nom" type="text" placeholder="ex. Pommes">
-        <div id="suggestions-catalogue" class="suggestions"></div>
+        <input id="nouveau-nom" type="text" placeholder="ex. Pommes" list="catalogue-datalist" autocomplete="off">
+        <datalist id="catalogue-datalist"></datalist>
         <label for="nouveau-stock">Stock</label>
         <input id="nouveau-stock" type="number" min="0" placeholder="ex. 20">
         <p class="sous-titre" id="indice-reappro" style="display:none; margin-top:0.4rem;"></p>
@@ -55,6 +63,10 @@
         <p class="erreur" id="erreur-ajout"></p>
       </div>
 
+      <div class="carte" style="max-width:480px; padding-bottom:0.5rem;">
+        <p class="oeil" style="margin-bottom:0.3rem;">3. Produits actifs sur le site</p>
+        <p class="sous-titre" style="margin-bottom:0.8rem;">Visibles par tes clients. Modifie nom ou stock directement.</p>
+      </div>
       <div id="liste-admin"></div>
     </div>
 
@@ -76,6 +88,7 @@ const ecranMdp = document.getElementById('ecran-mdp');
 const ecranDashboard = document.getElementById('ecran-dashboard');
 const listeAdmin = document.getElementById('liste-admin');
 const listeReservations = document.getElementById('liste-reservations');
+const listeCatalogue = document.getElementById('liste-catalogue');
 
 // ---------- Connexion ----------
 document.getElementById('btn-entrer').addEventListener('click', async () => {
@@ -118,16 +131,11 @@ document.getElementById('btn-banniere').addEventListener('click', async () => {
   const texte = document.getElementById('banniere-texte').value.trim();
   const erreurBanniere = document.getElementById('erreur-banniere');
   erreurBanniere.style.display = 'none';
-
-  const { error } = await supabaseClient.rpc('admin_modifier_banniere', {
-    p_mdp: mdpSaisi, p_texte: texte
-  });
-
+  const { error } = await supabaseClient.rpc('admin_modifier_banniere', { p_mdp: mdpSaisi, p_texte: texte });
   if (error) {
     erreurBanniere.textContent = "Erreur lors de l'enregistrement.";
     erreurBanniere.style.color = 'var(--rouge-rupture)';
     erreurBanniere.style.display = 'block';
-    console.error(error);
     return;
   }
   erreurBanniere.textContent = 'Bannière enregistrée ✓';
@@ -135,62 +143,52 @@ document.getElementById('btn-banniere').addEventListener('click', async () => {
   erreurBanniere.style.display = 'block';
 });
 
-// ---------- Catalogue de noms de produits ----------
+// ---------- 1. Catalogue ----------
 async function chargerCatalogue() {
   const { data, error } = await supabaseClient
     .from('catalogue_articles')
-    .select('nom')
+    .select('id, nom')
     .order('nom', { ascending: true });
   if (error) { console.error(error); return; }
 
-  const conteneur = document.getElementById('suggestions-catalogue');
+  // Remplit le datalist pour le champ "nouveau produit"
+  document.getElementById('catalogue-datalist').innerHTML =
+    data.map(a => `<option value="${a.nom}">`).join('');
+
+  // Affiche la liste modifiable
   if (!data.length) {
-    conteneur.innerHTML = '';
+    listeCatalogue.innerHTML = '<p class="vide">Aucun nom enregistré pour l’instant.</p>';
     return;
   }
-  conteneur.innerHTML = data.map(a =>
-    `<button type="button" class="suggestion" data-nom="${a.nom}">${a.nom}</button>`
-  ).join('');
+  listeCatalogue.innerHTML = data.map(a => `
+    <div style="display:flex; align-items:center; gap:0.6rem; margin-bottom:0.6rem;">
+      <input type="text" value="${a.nom}" data-catalogue-id="${a.id}" class="champ-nom-catalogue" style="flex:1;">
+      <button type="button" class="btn-supprimer" data-supprimer-catalogue="${a.id}" style="width:auto; margin-top:0; flex-shrink:0;">Supprimer</button>
+    </div>
+  `).join('');
 }
 
-document.getElementById('suggestions-catalogue').addEventListener('click', (e) => {
-  const bouton = e.target.closest('.suggestion');
-  if (!bouton) return;
-  document.getElementById('nouveau-nom').value = bouton.dataset.nom;
-  verifierReappro();
-  document.getElementById('nouveau-stock').focus();
+listeCatalogue.addEventListener('change', async (e) => {
+  if (!e.target.classList.contains('champ-nom-catalogue')) return;
+  const nouveauNom = e.target.value.trim();
+  if (!nouveauNom) return;
+  await supabaseClient.rpc('admin_renommer_catalogue', {
+    p_mdp: mdpSaisi, p_id: e.target.dataset.catalogueId, p_nouveau_nom: nouveauNom
+  });
+  chargerCatalogue();
 });
 
-// ---------- Produits ----------
-function rendreAdmin(produits) {
-  if (!produits.length) {
-    listeAdmin.innerHTML = '<p class="vide">Aucun produit pour l’instant. Ajoute ton premier produit ci-dessus.</p>';
-    return;
-  }
-  listeAdmin.innerHTML = '';
-  produits.forEach(p => {
-    const ligne = document.createElement('div');
-    ligne.className = 'ligne-admin';
-    ligne.innerHTML = `
-      <p class="ticket-nom">${p.nom}</p>
-      <label style="margin:0.4rem 0 0;">Stock</label>
-      <input type="number" min="0" value="${p.stock}" data-id="${p.id}" data-nom="${p.nom}" class="champ-stock">
-      <button class="btn-supprimer" data-supprimer="${p.id}">Supprimer</button>
-    `;
-    listeAdmin.appendChild(ligne);
+listeCatalogue.addEventListener('click', async (e) => {
+  const bouton = e.target.closest('button[data-supprimer-catalogue]');
+  if (!bouton) return;
+  if (!confirm('Retirer ce nom du catalogue ? (les produits déjà actifs sous ce nom ne sont pas touchés)')) return;
+  await supabaseClient.rpc('admin_supprimer_catalogue', {
+    p_mdp: mdpSaisi, p_id: bouton.dataset.supprimerCatalogue
   });
-}
+  chargerCatalogue();
+});
 
-async function chargerListeAdmin() {
-  const { data, error } = await supabaseClient
-    .from('produits')
-    .select('id, nom, stock')
-    .order('ordre', { ascending: true });
-  if (error) { console.error(error); return; }
-  produitsActuels = data;
-  rendreAdmin(data);
-}
-
+// ---------- 2. Réapprovisionnement (indice visuel) ----------
 function verifierReappro() {
   const nom = document.getElementById('nouveau-nom').value.trim().toLowerCase();
   const indice = document.getElementById('indice-reappro');
@@ -203,7 +201,6 @@ function verifierReappro() {
     indice.style.display = 'none';
   }
 }
-
 document.getElementById('nouveau-nom').addEventListener('input', verifierReappro);
 
 document.getElementById('btn-ajouter').addEventListener('click', async () => {
@@ -236,21 +233,52 @@ document.getElementById('btn-ajouter').addEventListener('click', async () => {
   chargerCatalogue();
 });
 
-listeAdmin.addEventListener('change', async (e) => {
-  if (!e.target.classList.contains('champ-stock')) return;
-  const nouveauStock = parseInt(e.target.value, 10) || 0;
+// ---------- 3. Produits actifs (nom + stock modifiables) ----------
+function rendreAdmin(produits) {
+  if (!produits.length) {
+    listeAdmin.innerHTML = '<p class="vide">Aucun produit actif pour l’instant.</p>';
+    return;
+  }
+  listeAdmin.innerHTML = produits.map(p => `
+    <div style="display:flex; align-items:center; gap:0.6rem; background:var(--papier-carte); border:1px solid var(--ligne); border-radius:var(--rayon); box-shadow:var(--ombre-carte); padding:1rem 1.1rem; margin-bottom:0.75rem;">
+      <input type="text" value="${p.nom}" data-produit-id="${p.id}" class="champ-nom-produit" style="flex:2;">
+      <input type="number" min="0" value="${p.stock}" data-produit-id="${p.id}" class="champ-stock" style="flex:1; text-align:center;">
+      <button type="button" class="btn-supprimer" data-supprimer="${p.id}" style="width:auto; margin-top:0; flex-shrink:0;">Suppr.</button>
+    </div>
+  `).join('');
+}
+
+async function chargerListeAdmin() {
+  const { data, error } = await supabaseClient
+    .from('produits')
+    .select('id, nom, stock')
+    .order('ordre', { ascending: true });
+  if (error) { console.error(error); return; }
+  produitsActuels = data;
+  rendreAdmin(data);
+}
+
+async function sauvegarderLigneProduit(produitId) {
+  const champNom = listeAdmin.querySelector(`.champ-nom-produit[data-produit-id="${produitId}"]`);
+  const champStock = listeAdmin.querySelector(`.champ-stock[data-produit-id="${produitId}"]`);
+  const nom = champNom.value.trim();
+  const stock = parseInt(champStock.value, 10) || 0;
+  if (!nom) return;
   await supabaseClient.rpc('admin_modifier_produit', {
-    p_mdp: mdpSaisi,
-    p_produit_id: e.target.dataset.id,
-    p_nom: e.target.dataset.nom,
-    p_stock: nouveauStock
+    p_mdp: mdpSaisi, p_produit_id: produitId, p_nom: nom, p_stock: stock
   });
+  chargerListeAdmin();
+}
+
+listeAdmin.addEventListener('change', (e) => {
+  if (!e.target.classList.contains('champ-nom-produit') && !e.target.classList.contains('champ-stock')) return;
+  sauvegarderLigneProduit(e.target.dataset.produitId);
 });
 
 listeAdmin.addEventListener('click', async (e) => {
   const bouton = e.target.closest('button[data-supprimer]');
   if (!bouton) return;
-  if (!confirm('Supprimer ce produit ?')) return;
+  if (!confirm('Supprimer ce produit du site ?')) return;
   await supabaseClient.rpc('admin_supprimer_produit', {
     p_mdp: mdpSaisi, p_produit_id: bouton.dataset.supprimer
   });
@@ -259,16 +287,11 @@ listeAdmin.addEventListener('click', async (e) => {
 
 // ---------- Réservations ----------
 function formaterDate(iso) {
-  return new Date(iso).toLocaleString('fr-FR', {
-    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
-  });
+  return new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
-
 function formaterDateRetrait(dateStr) {
   if (!dateStr) return '';
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('fr-FR', {
-    weekday: 'short', day: '2-digit', month: '2-digit'
-  });
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit' });
 }
 
 function afficherStatsSemaine(data) {
@@ -276,27 +299,19 @@ function afficherStatsSemaine(data) {
   const debutSemaine = new Date();
   debutSemaine.setHours(0, 0, 0, 0);
   while (debutSemaine.getDay() !== 1) debutSemaine.setDate(debutSemaine.getDate() - 1);
-
   const reservationsSemaine = data.filter(r => new Date(r.created_at) >= debutSemaine);
-  if (!reservationsSemaine.length) {
-    statsDiv.style.display = 'none';
-    return;
-  }
-
+  if (!reservationsSemaine.length) { statsDiv.style.display = 'none'; return; }
   const compteParProduit = {};
   reservationsSemaine.forEach(r => {
     const nom = r.produits?.nom ?? 'Produit supprimé';
     compteParProduit[nom] = (compteParProduit[nom] || 0) + r.quantite;
   });
-
   const [produitTop, quantiteTop] = Object.entries(compteParProduit).sort((a, b) => b[1] - a[1])[0];
-
   statsDiv.innerHTML = `
     <div class="stats-semaine">
       <span><strong>${reservationsSemaine.length}</strong> réservation${reservationsSemaine.length > 1 ? 's' : ''} cette semaine</span>
       <span>Produit le plus demandé : <strong>${produitTop}</strong> (${quantiteTop})</span>
-    </div>
-  `;
+    </div>`;
   statsDiv.style.display = 'block';
 }
 
@@ -309,46 +324,38 @@ async function chargerReservations() {
 
   if (error) {
     listeReservations.innerHTML = '<p class="vide">Impossible de charger les réservations.</p>';
-    console.error(error);
     return;
   }
   if (!data.length) {
     listeReservations.innerHTML = '<p class="vide">Aucune réservation pour l’instant.</p>';
+    document.getElementById('stats-semaine').style.display = 'none';
     return;
   }
 
   afficherStatsSemaine(data);
 
-  listeReservations.innerHTML = '';
-  data.forEach(r => {
-    const ligne = document.createElement('div');
-    ligne.className = 'ligne-admin';
-    ligne.innerHTML = `
+  listeReservations.innerHTML = data.map(r => `
+    <div style="display:flex; align-items:center; gap:0.75rem; background:var(--papier-carte); border:1px solid var(--ligne); border-radius:var(--rayon); box-shadow:var(--ombre-carte); padding:1.1rem 1.25rem; margin-bottom:0.75rem;">
       <div style="flex:1; min-width:0;">
         <p class="ticket-nom">${r.nom_client}</p>
         <p class="sous-titre" style="margin-top:0.15rem;">
-          ${r.produits?.nom ?? 'Produit supprimé'} · retrait ${formaterDateRetrait(r.date_retrait)} · réservé le ${formaterDate(r.created_at)}
+          ${r.quantite > 1 ? `${r.quantite}x ` : ''}${r.produits?.nom ?? 'Produit supprimé'} · retrait ${formaterDateRetrait(r.date_retrait)} · réservé le ${formaterDate(r.created_at)}
         </p>
       </div>
-      <input type="number" min="1" max="5" value="${r.quantite}" data-reservation="${r.id}" class="champ-stock">
-    `;
-    listeReservations.appendChild(ligne);
-  });
+      <button type="button" class="btn-supprimer" data-supprimer-reservation="${r.id}" style="width:auto; margin-top:0; flex-shrink:0;">Suppr.</button>
+    </div>
+  `).join('');
 }
 
-listeReservations.addEventListener('change', async (e) => {
-  if (!e.target.dataset.reservation) return;
-  const nouvelleQuantite = parseInt(e.target.value, 10) || 1;
-  const { data, error } = await supabaseClient.rpc('modifier_reservation', {
-    p_reservation_id: e.target.dataset.reservation,
-    p_nouvelle_quantite: nouvelleQuantite
+listeReservations.addEventListener('click', async (e) => {
+  const bouton = e.target.closest('button[data-supprimer-reservation]');
+  if (!bouton) return;
+  if (!confirm('Supprimer cette réservation ? Le stock sera remis à jour.')) return;
+  await supabaseClient.rpc('admin_supprimer_reservation', {
+    p_mdp: mdpSaisi, p_reservation_id: bouton.dataset.supprimerReservation
   });
-  if (error || !data || !data[0] || !data[0].succes) {
-    alert((data && data[0] && data[0].message) || 'Erreur lors de la modification.');
-    chargerReservations();
-    return;
-  }
   chargerReservations();
+  chargerListeAdmin();
 });
 </script>
 
