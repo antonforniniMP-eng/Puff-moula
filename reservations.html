@@ -26,6 +26,7 @@
     <p class="erreur" id="erreur-mdp">Mot de passe incorrect.</p>
   </div>
 
+  <div id="stats-semaine" style="display:none;"></div>
   <div id="liste-reservations" style="display:none;"></div>
 </main>
 
@@ -54,10 +55,50 @@ function formaterDate(iso) {
   });
 }
 
+function formaterDateRetrait(dateStr) {
+  if (!dateStr) return '';
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('fr-FR', {
+    weekday: 'short', day: '2-digit', month: '2-digit'
+  });
+}
+
+function afficherStatsSemaine(data) {
+  const statsDiv = document.getElementById('stats-semaine');
+
+  // Début de la semaine en cours (lundi 00:00)
+  const debutSemaine = new Date();
+  debutSemaine.setHours(0, 0, 0, 0);
+  while (debutSemaine.getDay() !== 1) debutSemaine.setDate(debutSemaine.getDate() - 1);
+
+  const reservationsSemaine = data.filter(r => new Date(r.created_at) >= debutSemaine);
+
+  if (!reservationsSemaine.length) {
+    statsDiv.style.display = 'none';
+    return;
+  }
+
+  const compteParProduit = {};
+  reservationsSemaine.forEach(r => {
+    const nom = r.produits?.nom ?? 'Produit supprimé';
+    compteParProduit[nom] = (compteParProduit[nom] || 0) + r.quantite;
+  });
+
+  const [produitTop, quantiteTop] = Object.entries(compteParProduit)
+    .sort((a, b) => b[1] - a[1])[0];
+
+  statsDiv.innerHTML = `
+    <div class="stats-semaine">
+      <span><strong>${reservationsSemaine.length}</strong> réservation${reservationsSemaine.length > 1 ? 's' : ''} cette semaine</span>
+      <span>Produit le plus demandé : <strong>${produitTop}</strong> (${quantiteTop})</span>
+    </div>
+  `;
+  statsDiv.style.display = 'block';
+}
+
 async function chargerReservations() {
   const { data, error } = await supabaseClient
     .from('reservations')
-    .select('id, nom_client, quantite, created_at, produits(nom)')
+    .select('id, nom_client, quantite, date_retrait, created_at, produits(nom)')
     .order('created_at', { ascending: false })
     .limit(100);
 
@@ -72,6 +113,8 @@ async function chargerReservations() {
     return;
   }
 
+  afficherStatsSemaine(data);
+
   listeReservations.innerHTML = '';
   data.forEach(r => {
     const ligne = document.createElement('div');
@@ -80,7 +123,7 @@ async function chargerReservations() {
       <div style="flex:1;">
         <p class="ticket-nom">${r.nom_client}</p>
         <p class="sous-titre" style="margin-top:0.15rem;">
-          ${r.quantite > 1 ? `${r.quantite}x ` : ''}${r.produits?.nom ?? 'Produit supprimé'} · ${formaterDate(r.created_at)}
+          ${r.quantite > 1 ? `${r.quantite}x ` : ''}${r.produits?.nom ?? 'Produit supprimé'} · retrait ${formaterDateRetrait(r.date_retrait)} · réservé le ${formaterDate(r.created_at)}
         </p>
       </div>
     `;
